@@ -1,0 +1,44 @@
+worker_processes 1;
+error_log /dev/stderr warn;
+events { worker_connections 512; }
+
+http {
+    include /etc/nginx/mime.types;
+    access_log off;
+    server_tokens off;
+    client_max_body_size 10M;
+    add_header X-Content-Type-Options "nosniff" always;
+
+    server {
+        listen ${PORT};
+
+        location ~ ^/api(/|$) {
+            include fastcgi_params;
+            fastcgi_param SCRIPT_FILENAME /var/www/html/public/index.php;
+            fastcgi_param SCRIPT_NAME /index.php;
+            fastcgi_pass 127.0.0.1:9000;
+            fastcgi_read_timeout 60;
+            fastcgi_buffer_size 16k;
+            fastcgi_buffers 16 16k;
+        }
+
+        # Only public image folders are exposed. Proof documents
+        # (justificantes, center_requests) go through the authenticated API.
+        location ^~ /storage/posts/   { alias /var/www/html/storage/app/public/posts/; }
+        location ^~ /storage/avatars/ { alias /var/www/html/storage/app/public/avatars/; }
+        location ^~ /storage/banners/ { alias /var/www/html/storage/app/public/banners/; }
+        location ^~ /storage/groups/  { alias /var/www/html/storage/app/public/groups/; }
+
+        location /socket.io/ {
+            proxy_pass http://127.0.0.1:3000;
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection "upgrade";
+            proxy_set_header Host $host;
+            proxy_buffering off;
+            proxy_read_timeout 3600s;
+        }
+
+        location / { return 404; }
+    }
+}

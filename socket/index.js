@@ -31,9 +31,47 @@ app.get("/health", (_req, res) => {
 // ─── Track subscribed channels (for debugging) ───────────────
 const subscribedChannels = new Set();
 
+// ─── Authentication ───────────────────────────────────────────
+// The API is the single source of truth: the token is checked there and the
+// identity is never taken from client-supplied user IDs.
+const API_BASE = process.env.VITE_API_URL || `${process.env.API_URL || "http://localhost:8080"}/api`;
+
+const apiGet = async (path, token) => {
+  const response = await fetch(`${API_BASE}${path}`, {
+    headers: { Accept: "application/json", ...(token && { Authorization: `Bearer ${token}` }) },
+  });
+  if (!response.ok) return null;
+  return (await response.json()).data;
+};
+
+io.use(async (socket, next) => {
+  const token = socket.handshake.auth?.token;
+  if (!token) return next(); // anonymous: public rooms only
+
+  try {
+    const data = await apiGet("/me", token);
+    if (!data?.user) return next(new Error("Unauthorized"));
+    socket.data.userId = Number(data.user.id);
+    socket.data.role = data.user.role;
+    socket.data.token = token;
+    next();
+  } catch (err) {
+    next(new Error("Authentication unavailable"));
+  }
+});
+
+// Room of a private chat, only if the authenticated user is one of the two ends
+const chatRoomFor = (socket, a, b) => {
+  const me = socket.data.userId;
+  const ids = [Number(a), Number(b)].sort((x, y) => x - y);
+  return me && ids.includes(me) && ids.every(Number.isInteger) ? `chat.${ids[0]}-${ids[1]}` : null;
+};
+
 // ─── Socket.io connection handling ────────────────────────────
 io.on("connection", (socket) => {
   console.log(`[Socket.io] Client connected: ${socket.id}`);
+  const me = () => socket.data.userId;
+  if (me()) socket.join(`user.${me()}`);
 
   /**
    * Clients join their personal room so they receive
@@ -41,10 +79,8 @@ io.on("connection", (socket) => {
    *   socket.emit('join', { userId: 3 })
    */
   socket.on("join", (data) => {
-    if (data && data.userId) {
-      const room = `user.${data.userId}`;
-      socket.join(room);
-      console.log(`[Socket.io] ${socket.id} joined room ${room}`);
+    if (data && me() && Number(data.userId) === me()) {
+      socket.join(`user.${me()}`);
     }
   });
 
@@ -53,19 +89,22 @@ io.on("connection", (socket) => {
    *   socket.emit('join-admin')
    */
   socket.on("join-admin", () => {
-    socket.join("admin");
-    console.log(`[Socket.io] ${socket.id} joined room admin`);
+    if (socket.data.role === "admin") socket.join("admin");
   });
 
   /**
    * Clients join a post room to receive live comments.
    *   socket.emit('join-post', { postId: 1 })
    */
-  socket.on("join-post", (data) => {
-    if (data && data.postId) {
-      const room = `post.${data.postId}`;
-      socket.join(room);
-      console.log(`[Socket.io] ${socket.id} joined room ${room}`);
+  socket.on("join-post", async (data) => {
+    const postId = Number(data?.postId);
+    if (!Number.isInteger(postId)) return;
+    try {
+      // The API decides visibility (center posts are members-only)
+      const post = await apiGet(`/posts/${postId}`, socket.data.token);
+      if (post) socket.join(`post.${postId}`);
+    } catch (err) {
+      console.error("[Socket.io] Post check failed:", err.message);
     }
   });
 
@@ -112,12 +151,8 @@ io.on("connection", (socket) => {
    *   socket.emit('join-chat', { partnerId: 5 }) // Current user + partner
    */
   socket.on("join-chat", (data) => {
-    if (data && data.partnerId && data.userId) {
-      const ids = [data.userId, data.partnerId].sort((a, b) => a - b);
-      const room = `chat.${ids[0]}-${ids[1]}`;
-      socket.join(room);
-      console.log(`[Socket.io] ${socket.id} joined room ${room}`);
-    }
+    const room = chatRoomFor(socket, data?.userId, data?.partnerId);
+    if (room) socket.join(room);
   });
 
   /**
@@ -136,11 +171,15 @@ io.on("connection", (socket) => {
    * Clients join a group room to receive live messages.
    *   socket.emit('join-group', { groupId: 5 })
    */
-  socket.on("join-group", (data) => {
-    if (data && data.groupId) {
-      const room = `group.${data.groupId}`;
-      socket.join(room);
-      console.log(`[Socket.io] ${socket.id} joined room ${room}`);
+  socket.on("join-group", async (data) => {
+    const groupId = Number(data?.groupId);
+    if (!me() || !Number.isInteger(groupId)) return;
+    try {
+      const result = await apiGet("/groups", socket.data.token);
+      const isMember = (result?.groups || []).some((g) => Number(g.id) === groupId);
+      if (isMember) socket.join(`group.${groupId}`);
+    } catch (err) {
+      console.error("[Socket.io] Group check failed:", err.message);
     }
   });
 
@@ -160,20 +199,21 @@ io.on("connection", (socket) => {
    *   socket.emit('typing', { partnerId: 5, userId: 3 })
    */
   socket.on("typing", (data) => {
-    if (data && data.userId) {
+    if (data && me()) {
       if (typeof data.partnerId === "string" && data.partnerId.startsWith("group_")) {
         const groupId = data.partnerId.replace("group_", "");
         const room = `group.${groupId}`;
+        if (!socket.rooms.has(room)) return;
         socket.to(room).emit("user.typing", {
-          userId: data.userId,
+          userId: me(),
           isTyping: data.isTyping !== false,
           groupId: parseInt(groupId),
         });
       } else if (data.partnerId) {
-        const ids = [data.userId, data.partnerId].sort((a, b) => a - b);
-        const room = `chat.${ids[0]}-${ids[1]}`;
+        const room = chatRoomFor(socket, me(), data.partnerId);
+        if (!room) return;
         socket.to(room).emit("user.typing", {
-          userId: data.userId,
+          userId: me(),
           isTyping: data.isTyping !== false,
         });
       }
@@ -212,10 +252,6 @@ io.on("connection", (socket) => {
       const apiUrl = process.env.VITE_API_URL || `${process.env.API_URL || "http://localhost:8080"}/api`;
       console.log(
         `[Socket.io] Sending message to API: ${apiUrl}/chat/messages`,
-        {
-          receiver_id: receiverId,
-          content: content.trim().substring(0, 50) + "...",
-        },
       );
 
       const response = await fetch(`${apiUrl}/chat/messages`, {
@@ -234,7 +270,7 @@ io.on("connection", (socket) => {
       });
 
       const result = await response.json();
-      console.log(`[Socket.io] API response: ${response.status}`, result);
+      console.log(`[Socket.io] API response: ${response.status}`);
 
       if (!response.ok) {
         if (callback)
@@ -331,9 +367,10 @@ io.on("connection", (socket) => {
    *   socket.emit('mark-read', { partnerId, token })
    */
   socket.on("mark-read", async (data) => {
-    const { partnerId, userId, token } = data || {};
+    const { partnerId, token } = data || {};
+    const userId = me();
 
-    if (!partnerId || !token) return;
+    if (!partnerId || !token || !userId || token !== socket.data.token) return;
 
     try {
       // VITE_API_URL already includes /api
@@ -365,39 +402,38 @@ io.on("connection", (socket) => {
    * WebRTC Signaling
    */
   socket.on("call-user", (data) => {
-    if (data && data.userToCall && data.signalData && data.from) {
+    if (data && data.userToCall && data.signalData && me()) {
       io.to(`user.${data.userToCall}`).emit("call-made", {
         signal: data.signalData,
-        from: data.from,
+        from: me(),
         callerInfo: data.callerInfo,
         isVideo: data.isVideo
       });
-      console.log(`[Socket.io] Call from ${data.from} to ${data.userToCall}`);
     }
   });
 
   socket.on("make-answer", (data) => {
-    if (data && data.to && data.signal) {
+    if (data && data.to && data.signal && me()) {
       io.to(`user.${data.to}`).emit("call-answered", {
         signal: data.signal,
-        from: data.from
+        from: me()
       });
       console.log(`[Socket.io] Call answered from ${data.from} to ${data.to}`);
     }
   });
 
   socket.on("ice-candidate", (data) => {
-    if (data && data.to && data.candidate) {
+    if (data && data.to && data.candidate && me()) {
       io.to(`user.${data.to}`).emit("ice-candidate-received", {
         candidate: data.candidate,
-        from: data.from
+        from: me()
       });
     }
   });
 
   const lastEndCall = new Map();
   socket.on("end-call", (data) => {
-    if (data && data.to) {
+    if (data && data.to && me()) {
       const now = Date.now();
       const key = `${socket.id}-${data.to}`;
       if (lastEndCall.has(key) && now - lastEndCall.get(key) < 1000) {
@@ -405,32 +441,32 @@ io.on("connection", (socket) => {
       }
       lastEndCall.set(key, now);
       
-      io.to(`user.${data.to}`).emit("call-ended", { from: data.from });
+      io.to(`user.${data.to}`).emit("call-ended", { from: me() });
       console.log(`[Socket.io] Call ended by ${data.from} (sent to ${data.to})`);
     }
   });
 
   socket.on("reject-call", (data) => {
-    if (data && data.to) {
-      io.to(`user.${data.to}`).emit("call-rejected", { from: data.from });
+    if (data && data.to && me()) {
+      io.to(`user.${data.to}`).emit("call-rejected", { from: me() });
       console.log(`[Socket.io] Call rejected by ${data.from}`);
     }
   });
 
   socket.on("video-toggle", (data) => {
-    if (data && data.to) {
+    if (data && data.to && me()) {
       io.to(`user.${data.to}`).emit("peer-video-toggle", {
         isVideoOff: data.isVideoOff,
-        from: data.from
+        from: me()
       });
     }
   });
   
   socket.on("audio-toggle", (data) => {
-    if (data && data.to) {
+    if (data && data.to && me()) {
       io.to(`user.${data.to}`).emit("peer-audio-toggle", {
         isMuted: data.isMuted,
-        from: data.from
+        from: me()
       });
     }
   });
@@ -503,8 +539,7 @@ redisSubscriber.on("pmessage", (_pattern, channel, rawMessage) => {
     const eventData = payload.data; // the broadcastWith() object
 
     console.log(
-      `[Socket.io] Redis ← channel=${laravelChannel} event=${eventName}`,
-      JSON.stringify(eventData)
+      `[Socket.io] Redis ← channel=${laravelChannel} event=${eventName}`
     );
 
     // Emit to the matching Socket.io room

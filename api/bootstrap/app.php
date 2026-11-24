@@ -12,6 +12,11 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        // Only trust proxy headers where a proxy is guaranteed to set them
+        if (env('RENDER')) {
+            $middleware->trustProxies(at: '*');
+        }
+
         $middleware->api(prepend: [
             \Illuminate\Http\Middleware\HandleCors::class,
             \App\Http\Middleware\ForceJsonResponse::class,

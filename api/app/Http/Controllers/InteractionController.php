@@ -191,7 +191,7 @@ class InteractionController extends Controller
                     $query->orWhere('center_id', $user->center_id); // User's own center posts
                 }
             })
-            ->orderByRaw('FIELD(id, ' . implode(',', $postIds) . ')');
+            ->orderByRaw($this->orderByIdsSql($postIds));
 
         $posts = $postsQuery->paginate($request->input('per_page', 15));
 
@@ -206,6 +206,19 @@ class InteractionController extends Controller
                 'total'        => $posts->total(),
             ],
         ]);
+    }
+
+    /**
+     * Portable replacement for MySQL's FIELD(): keeps rows in the given ID order.
+     */
+    private function orderByIdsSql(array $ids): string
+    {
+        $cases = '';
+        foreach (array_values($ids) as $position => $id) {
+            $cases .= sprintf(' WHEN %d THEN %d', (int) $id, $position);
+        }
+
+        return "CASE posts.id{$cases} END";
     }
 
     /**
@@ -249,7 +262,7 @@ class InteractionController extends Controller
                     $query->orWhere('center_id', $user->center_id); // User's own center posts
                 }
             })
-            ->orderByRaw('FIELD(id, ' . implode(',', $postIds) . ')');
+            ->orderByRaw($this->orderByIdsSql($postIds));
 
         $posts = $postsQuery->paginate($request->input('per_page', 15));
 

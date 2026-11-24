@@ -26,6 +26,10 @@ class AuthController extends Controller
      */
     public function register(RegisterRequest $request): JsonResponse
     {
+        if (!config('codex.registration_enabled')) {
+            return $this->error('Registration is closed on this demo.', 403);
+        }
+
         $user = $this->authService->register($request->validated());
 
         // Send verification email

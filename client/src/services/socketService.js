@@ -17,7 +17,15 @@ const socketService = {
    * @returns {Socket} Socket.io instance
    */
   connect: (token = null) => {
-    if (socket && socket.connected) {
+    if (socket) {
+      if (token === authToken) {
+        if (!socket.connected) socket.connect();
+        return socket;
+      }
+      // Session changed: reconnect with the new identity, keeping listeners
+      authToken = token;
+      socket.auth = token ? { token } : {};
+      socket.disconnect().connect();
       return socket;
     }
 
@@ -76,6 +84,8 @@ const socketService = {
       socket.disconnect();
       socket = null;
     }
+    authToken = null;
+    rooms.clear();
   },
 
   /**

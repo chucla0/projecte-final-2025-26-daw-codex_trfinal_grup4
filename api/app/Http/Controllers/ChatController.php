@@ -330,8 +330,8 @@ class ChatController extends Controller
             ->where('id', '!=', $currentUser->id)
             ->where('role', '!=', 'admin')
             ->where(function ($q) use ($query) {
-                $q->where('username', 'like', "%{$query}%")
-                  ->orWhere('name', 'like', "%{$query}%");
+                $q->whereLike('username', "%{$query}%")
+                  ->orWhereLike('name', "%{$query}%");
             })
             ->select(['id', 'name', 'username', 'avatar', 'role'])
             ->limit(10)

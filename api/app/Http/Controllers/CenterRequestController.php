@@ -150,7 +150,7 @@ class CenterRequestController extends Controller
             // become students of this center (excluding the requester, already set as teacher)
             User::whereNull('center_id')
                 ->where('id', '!=', $centerRequest->user_id)
-                ->where('email', 'like', '%@' . $centerRequest->domain)
+                ->whereLike('email', '%@' . $centerRequest->domain)
                 ->where('role', '!=', UserRole::Admin->value)
                 ->update([
                     'center_id' => $center->id,

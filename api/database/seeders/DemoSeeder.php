@@ -27,7 +27,7 @@ class DemoSeeder extends Seeder
     public function run(): void
     {
         $now = Carbon::now();
-        $password = Hash::make('password');
+        $password = Hash::make(config('codex.demo_password'));
 
         // ─────────────────────────────────────────────────────────────
         //  CENTERS (find or create by domain)
@@ -77,7 +77,7 @@ class DemoSeeder extends Seeder
                 'name'              => 'Admin System',
                 'username'          => 'admin',
                 'email'             => 'admin@codex.com',
-                'password'          => $password,
+                'password'          => Hash::make(config('codex.admin_password')),
                 'role'              => 'admin',
                 'is_blocked'        => false,
                 'auth_provider'     => 'local',
@@ -1113,8 +1113,7 @@ jobs:
         echo "   - a23ikedelgra@inspedralbes.cat\n";
         echo "   - a23marrojgon@inspedralbes.cat\n";
         echo "   - a23poldiabel@inspedralbes.cat\n";
-        echo "🔑 Fictitious users password: 'password'\n";
-        echo "🔑 Admin: admin@codex.com (password: 'password')\n";
+        echo "🔑 Passwords come from DEMO_PASSWORD and ADMIN_PASSWORD\n";
         echo "\n⚠️  If Pedralbes users show as NOT FOUND, they need to login with Google first, then re-run the seeder.\n";
     }
 }

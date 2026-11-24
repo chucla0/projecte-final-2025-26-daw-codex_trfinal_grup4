@@ -26,10 +26,10 @@ class AdminPostController extends Controller
         if ($request->has('search')) {
             $search = $request->input('search');
             $query->where(function ($q) use ($search) {
-                $q->where('content', 'like', "%{$search}%")
+                $q->whereLike('content', "%{$search}%")
                   ->orWhereHas('user', function ($uq) use ($search) {
-                      $uq->where('name', 'like', "%{$search}%")
-                         ->orWhere('username', 'like', "%{$search}%");
+                      $uq->whereLike('name', "%{$search}%")
+                         ->orWhereLike('username', "%{$search}%");
                   });
             });
         }

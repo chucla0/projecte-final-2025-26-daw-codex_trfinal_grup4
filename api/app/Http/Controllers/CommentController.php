@@ -28,6 +28,12 @@ class CommentController extends Controller
      */
     public function index(int $postId): JsonResponse
     {
+        // Comments follow the visibility of their post (see PostController::show)
+        $post = \App\Models\Post::findOrFail($postId);
+        if ($post->center_id !== null && auth('sanctum')->user()?->center_id !== $post->center_id) {
+            return $this->error('Access denied. This content belongs to a center.', 403);
+        }
+
         $comments = Comment::where('post_id', $postId)
             ->whereNull('parent_id') // Top-level only
             ->with(['user', 'replies.user'])

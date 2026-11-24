@@ -41,17 +41,17 @@ class SearchController extends Controller
             if ($isTagSearch) {
                 // When searching for a hashtag, search posts by tag name only
                 $postsQuery->whereHas('tags', function ($tq) use ($tagQuery) {
-                    $tq->where('name', 'LIKE', "%{$tagQuery}%")
-                       ->orWhere('slug', 'LIKE', "%{$tagQuery}%");
+                    $tq->whereLike('name', "%{$tagQuery}%")
+                       ->orWhereLike('slug', "%{$tagQuery}%");
                 });
             } else {
                 // Regular search: content, code snippet, and tags
                 $postsQuery->where(function ($q) use ($query, $tagQuery) {
-                    $q->where('content', 'LIKE', "%{$query}%")
-                      ->orWhere('code_snippet', 'LIKE', "%{$query}%")
+                    $q->whereLike('content', "%{$query}%")
+                      ->orWhereLike('code_snippet', "%{$query}%")
                       ->orWhereHas('tags', function ($tq) use ($tagQuery) {
-                          $tq->where('name', 'LIKE', "%{$tagQuery}%")
-                             ->orWhere('slug', 'LIKE', "%{$tagQuery}%");
+                          $tq->whereLike('name', "%{$tagQuery}%")
+                             ->orWhereLike('slug', "%{$tagQuery}%");
                       });
                 });
             }
@@ -69,9 +69,9 @@ class SearchController extends Controller
         // Search users (skip when searching hashtags)
         if ((!$type || $type === 'users') && !$isTagSearch) {
             $users = User::where(function ($q) use ($query) {
-                    $q->where('name', 'LIKE', "%{$query}%")
-                      ->orWhere('username', 'LIKE', "%{$query}%")
-                      ->orWhere('bio', 'LIKE', "%{$query}%");
+                    $q->whereLike('name', "%{$query}%")
+                      ->orWhereLike('username', "%{$query}%")
+                      ->orWhereLike('bio', "%{$query}%");
                 })
                 ->where('role', '!=', 'admin')
                 ->select('id', 'name', 'username', 'avatar', 'bio', 'role', 'center_id')
@@ -85,8 +85,8 @@ class SearchController extends Controller
         // Search tags (use tagQuery without #)
         if (!$type || $type === 'tags') {
             $tags = Tag::where(function ($q) use ($tagQuery) {
-                    $q->where('name', 'LIKE', "%{$tagQuery}%")
-                      ->orWhere('slug', 'LIKE', "%{$tagQuery}%");
+                    $q->whereLike('name', "%{$tagQuery}%")
+                      ->orWhereLike('slug', "%{$tagQuery}%");
                 })
                 ->withCount('posts')
                 ->orderByDesc('posts_count')
@@ -138,16 +138,16 @@ class SearchController extends Controller
         if ($isTagSearch) {
             // When searching for a hashtag, search posts by tag name only
             $postsQuery->whereHas('tags', function ($tq) use ($tagQuery) {
-                $tq->where('name', 'LIKE', "%{$tagQuery}%")
-                   ->orWhere('slug', 'LIKE', "%{$tagQuery}%");
+                $tq->whereLike('name', "%{$tagQuery}%")
+                   ->orWhereLike('slug', "%{$tagQuery}%");
             });
         } else {
             $postsQuery->where(function ($q) use ($query, $tagQuery) {
-                $q->where('content', 'LIKE', "%{$query}%")
-                  ->orWhere('code_snippet', 'LIKE', "%{$query}%")
+                $q->whereLike('content', "%{$query}%")
+                  ->orWhereLike('code_snippet', "%{$query}%")
                   ->orWhereHas('tags', function ($tq) use ($tagQuery) {
-                      $tq->where('name', 'LIKE', "%{$tagQuery}%")
-                         ->orWhere('slug', 'LIKE', "%{$tagQuery}%");
+                      $tq->whereLike('name', "%{$tagQuery}%")
+                         ->orWhereLike('slug', "%{$tagQuery}%");
                   });
             });
         }
@@ -165,8 +165,8 @@ class SearchController extends Controller
             $members = User::where('center_id', $user->center_id)
                 ->where('role', '!=', 'admin')
                 ->where(function ($q) use ($query) {
-                    $q->where('name', 'LIKE', "%{$query}%")
-                      ->orWhere('username', 'LIKE', "%{$query}%");
+                    $q->whereLike('name', "%{$query}%")
+                      ->orWhereLike('username', "%{$query}%");
                 })
                 ->select('id', 'name', 'username', 'avatar', 'role')
                 ->limit(20)

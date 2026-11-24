@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\User;
 use App\Services\AuthService;
 use App\Traits\ApiResponse;
 use Illuminate\Http\JsonResponse;
@@ -68,6 +69,11 @@ class GoogleAuthController extends Controller
         // Validate that we got a valid email
         if (!$googleUser->getEmail()) {
             return $this->error('Could not retrieve email from Google.', 422);
+        }
+
+        if (!config('codex.registration_enabled')
+            && !User::where('google_id', $googleUser->getId())->orWhere('email', $googleUser->getEmail())->exists()) {
+            return $this->error('Registration is closed on this demo.', 403);
         }
 
         // Handle user creation/login via AuthService

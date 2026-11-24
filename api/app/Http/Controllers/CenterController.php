@@ -88,8 +88,8 @@ class CenterController extends Controller
         if ($request->has('search')) {
             $search = $request->search;
             $query->where(function ($q) use ($search) {
-                $q->where('name', 'like', "%{$search}%")
-                  ->orWhere('username', 'like', "%{$search}%");
+                $q->whereLike('name', "%{$search}%")
+                  ->orWhereLike('username', "%{$search}%");
             });
         }
 
