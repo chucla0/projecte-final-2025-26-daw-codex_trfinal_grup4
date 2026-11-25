@@ -1,5 +1,13 @@
 # Projecte Final DAW – Codex TRFinal Grup 4
 
+> **Sobre aquest fork.** Codex és el projecte final de DAW d'un equip de quatre. L'original és a [inspedralbes](https://github.com/inspedralbes/projecte-final-2025-26-daw-codex_trfinal_grup4). Aquest fork és d'Izan de la Cruz ([portafolis](https://izandelacruz.dev.ar/codex)) i hi afegeix la configuració per allotjar-lo en serveis gratuïts.
+>
+> **Què vaig fer jo:** la major part de l'API en Laravel (publicacions, accés amb Google, cerca, centres i notificacions) i el desplegament amb Docker i GitHub Actions. També vaig treballar en la interfície.
+>
+> La versió en línia d'aquest fork està en preparació.
+
+![Mur de Codex amb dades d'exemple](https://izandelacruz.dev.ar/shots/codex.webp)
+
 ## 🔗 Enllaços Importants
 
 | Recurs | Enllaç |
